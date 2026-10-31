@@ -1,0 +1,19 @@
+{
+  "name": "MediScribe AI - Asistente de Consulta Médica",
+  "short_name": "MediScribe AI",
+  "description": "Transcribe consultas médico-paciente, depura charla casual y estructura las 6 secciones de la Historia Clínica para Medicina General.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

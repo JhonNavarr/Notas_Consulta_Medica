@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0284c7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="MediScribe AI: Transcribe la consulta médico-paciente, filtra charla casual y estructura las 6 secciones de la Historia Clínica.">
+  <title>MediScribe AI — Notas de Consulta Médica</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img src="icon.svg" alt="MediScribe AI" class="brand-icon">
+        <div>
+          <h1 class="brand-title">MediScribe <span class="brand-badge">AI</span></h1>
+          <p class="brand-subtitle">Medicina General · 6 Secciones HCE</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnInstallPwa" class="icon-btn hidden" title="Instalar en el celular" aria-label="Instalar App">
+          📲
+        </button>
+        <button id="btnHistory" class="icon-btn" title="Historial del turno" aria-label="Historial">
+          🕒 <span id="historyCount" class="counter-pill">0</span>
+        </button>
+        <button id="btnTheme" class="icon-btn" title="Cambiar modo claro/oscuro" aria-label="Tema">
+          🌙
+        </button>
+        <button id="btnSettings" class="settings-pill" title="Configurar Motor IA">
+          <span id="aiStatusDot" class="status-dot"></span>
+          <span id="aiProviderLabel">Configurar IA</span>
+          ⚙️
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="main-container">
+
+    <!-- PATIENT QUICK CONTEXT BAR (OPTIONAL) -->
+    <section class="card context-card">
+      <div class="context-header" id="toggleContextBar">
+        <div class="context-title">
+          <span>👤 Datos rápidos del paciente <small>(Opcional para redacción)</small></span>
+        </div>
+        <button type="button" class="btn-link" id="btnNewConsultation" title="Limpiar todo para nuevo paciente">
+          🧹 Nueva Consulta
+        </button>
+      </div>
+      <div class="context-grid">
+        <div class="input-group">
+          <label for="patientRef">Ref / Nombre o ID</label>
+          <input type="text" id="patientRef" placeholder="Ej: María G. / Cama 4" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label for="patientAge">Edad</label>
+          <input type="text" id="patientAge" placeholder="Ej: 45 años" autocomplete="off">
+        </div>
+        <div class="input-group">
+          <label for="patientSex">Sexo</label>
+          <select id="patientSex">
+            <option value="">Auto-detectar en audio</option>
+            <option value="Femenino">Femenino</option>
+            <option value="Masculino">Masculino</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="consultType">Tipo</label>
+          <select id="consultType">
+            <option value="Primera vez / Consulta Externa">Consulta Externa</option>
+            <option value="Control Médico">Control Médico</option>
+            <option value="Urgencias / Prioritaria">Prioritaria / Urgencias</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 1: VOICE CAPTURE TABS -->
+    <section class="card capture-card">
+      <div class="section-header-row">
+        <h2 class="section-title">1. Captura de la Consulta</h2>
+        <div class="demo-selector-wrap">
+          <select id="demoCaseSelect" class="demo-select" aria-label="Cargar ejemplo clínico">
+            <option value="">🧪 Cargar consulta de ejemplo...</option>
+            <option value="gastritis">Caso 1: Dolor epigástrico + HTA (con charla casual)</option>
+            <option value="faringitis">Caso 2: Odinofagia + Fiebre + Incapacidad</option>
+            <option value="cefalea">Caso 3: Cefalea migrañosa + Control</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- MODE SWITCHER -->
+      <div class="mode-tabs" role="tablist">
+        <button type="button" class="mode-tab active" data-mode="native" id="tabNative" role="tab" aria-selected="true">
+          <span class="tab-icon">🗣️</span>
+          <div class="tab-text">
+            <strong>Dictado Nativo / Teclado</strong>
+            <small>Gratis · En vivo en el teléfono</small>
+          </div>
+        </button>
+        <button type="button" class="mode-tab" data-mode="recorder" id="tabRecorder" role="tab" aria-selected="false">
+          <span class="tab-icon">🎙️</span>
+          <div class="tab-text">
+            <strong>Grabadora de Consulta IA</strong>
+            <small>Audio ambiente · Gemini / Whisper</small>
+          </div>
+        </button>
+      </div>
+
+      <!-- PANEL MODE 1: NATIVE SPEECH TO TEXT -->
+      <div id="panelNative" class="mode-panel active">
+        <div class="native-controls">
+          <button type="button" id="btnStartNative" class="btn-mic-primary">
+            <span class="mic-pulse-ring"></span>
+            <span id="nativeMicIcon">🎤</span>
+            <span id="nativeMicText">Iniciar Escucha en Vivo</span>
+          </button>
+
+          <div class="native-meta">
+            <div class="timer-badge" id="nativeTimer">00:00</div>
+            <label class="toggle-inline" title="Mantiene el micrófono encendido aunque haya silencios en la consulta">
+              <input type="checkbox" id="chkAutoRestart" checked>
+              <span>Auto-continuar en pausas</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="info-banner-compact">
+          💡 <strong>Tip Celular:</strong> Puedes usar el botón de arriba <em>o tocar dentro del cuadro inferior y activar el micrófono 🎤 del teclado de tu teléfono</em> (Gboard / iOS) para dictar o escuchar la consulta.
+        </div>
+
+        <div class="transcript-box-wrap">
+          <div class="transcript-toolbar">
+            <span class="toolbar-label">Transcripción en bruto (incluye todo lo capturado):</span>
+            <div class="toolbar-btns">
+              <button type="button" id="btnInsertVitalsPrompt" class="btn-chip" title="Insertar guía rápida de signos vitales">
+                + Signos Vitales
+              </button>
+              <button type="button" id="btnClearTranscript" class="btn-chip danger" title="Borrar transcripción">
+                Borrar
+              </button>
+            </div>
+          </div>
+          <textarea
+            id="rawTranscript"
+            rows="6"
+            placeholder="Aquí aparecerá todo lo que hablen médico y paciente (incluso saludos o charla no médica). También puedes pegar texto o dictar con el micrófono del teclado del celular..."
+          ></textarea>
+          <div id="interimTranscript" class="interim-preview hidden"></div>
+        </div>
+      </div>
+
+      <!-- PANEL MODE 2: AMBIENT AUDIO RECORDER -->
+      <div id="panelRecorder" class="mode-panel hidden">
+        <div class="recorder-stage">
+          <canvas id="audioVisualizer" width="600" height="86"></canvas>
+
+          <div class="recorder-status-row">
+            <span id="recStateBadge" class="rec-badge idle">Listo para grabar</span>
+            <span id="recTimer" class="rec-timer">00:00</span>
+          </div>
+
+          <div class="recorder-buttons">
+            <button type="button" id="btnStartRec" class="btn-rec-main">
+              🔴 Grabar Consulta Completa
+            </button>
+            <button type="button" id="btnPauseRec" class="btn-rec-secondary hidden">
+              ⏸️ Pausar
+            </button>
+            <button type="button" id="btnStopRec" class="btn-rec-stop hidden">
+              ⏹️ Finalizar Grabación
+            </button>
+          </div>
+
+          <!-- Recorded or Uploaded Audio Preview -->
+          <div id="audioPreviewWrap" class="audio-preview-wrap hidden">
+            <audio id="recordedAudioPlayer" controls playsinline></audio>
+            <div class="audio-file-info">
+              <span id="audioMetaText">Audio capturado listo para procesar con IA</span>
+              <button type="button" id="btnDiscardAudio" class="btn-chip danger">Descartar audio</button>
+            </div>
+          </div>
+
+          <div class="upload-audio-row">
+            <label for="audioFileInput" class="btn-upload-audio">
+              📂 ¿Grabaste con la grabadora del celular o WhatsApp? Subir audio (.mp3, .m4a, .ogg, .wav)
+            </label>
+            <input type="file" id="audioFileInput" accept="audio/*" class="hidden">
+          </div>
+        </div>
+      </div>
+
+      <!-- CLINICAL PROCESSING OPTIONS & MAIN CTA -->
+      <div class="process-options-bar">
+        <label class="check-option">
+          <input type="checkbox" id="chkNormalExamFill" checked>
+          <span>Completar <strong>Examen Físico normal</strong> en sistemas no mencionados</span>
+        </label>
+        <label class="check-option">
+          <input type="checkbox" id="chkIncludeCie10" checked>
+          <span>Sugerir códigos <strong>CIE-10</strong> en Análisis</span>
+        </label>
+      </div>
+
+      <button type="button" id="btnProcessAi" class="btn-process-ai">
+        <span class="sparkle-icon">✨</span>
+        <span id="btnProcessText">Depurar Ruido y Estructurar Historia Clínica (6 Secciones)</span>
+      </button>
+
+      <!-- Progress / Status Feedback -->
+      <div id="processingAlert" class="processing-alert hidden">
+        <div class="spinner"></div>
+        <span id="processingAlertText">Filtrando conversación no médica y estructurando las 6 secciones clínicas...</span>
+      </div>
+    </section>
+
+    <!-- FILTERED NOISE SUMMARY BANNER -->
+    <section id="noiseFilteredBanner" class="noise-banner hidden">
+      <div class="noise-banner-icon">🧹</div>
+      <div class="noise-banner-content">
+        <strong>Depuración completada:</strong>
+        <span id="noiseFilteredText">Se descartaron saludos, charla casual y muletillas no relacionadas con el acto médico.</span>
+      </div>
+    </section>
+
+    <!-- STEP 2: THE 6 CLINICAL SECTIONS OUTPUT -->
+    <section class="card output-card" id="outputSection">
+      <div class="output-header">
+        <div>
+          <h2 class="section-title">2. Nota Médica Estructurada</h2>
+          <p class="section-subtitle">Puedes editar cualquier campo o copiar sección por sección</p>
+        </div>
+        <div class="output-quick-actions">
+          <button type="button" id="btnCopyAllTop" class="btn-action-primary">
+            📋 Copiar Todo
+          </button>
+        </div>
+      </div>
+
+      <div class="clinical-sections-grid">
+        <!-- 1. MOTIVO DE LA CONSULTA -->
+        <div class="clinical-block" data-section="motivo">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">1</span>
+              <label for="secMotivo" class="block-title">Motivo de la consulta</label>
+            </div>
+            <button type="button" class="btn-copy-sec" data-target="secMotivo" data-label="Motivo de la consulta">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="secMotivo" rows="2" placeholder="Razón principal por la que consulta el paciente..."></textarea>
+        </div>
+
+        <!-- 2. ENFERMEDAD ACTUAL -->
+        <div class="clinical-block" data-section="enfermedadActual">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">2</span>
+              <label for="secEnfermedadActual" class="block-title">Enfermedad Actual</label>
+            </div>
+            <button type="button" class="btn-copy-sec" data-target="secEnfermedadActual" data-label="Enfermedad Actual">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="secEnfermedadActual" rows="5" placeholder="Relato cronológico y semiológico de los síntomas, evolución, características, agravantes/atenuantes y síntomas asociados..."></textarea>
+        </div>
+
+        <!-- 3. ANTECEDENTES -->
+        <div class="clinical-block" data-section="antecedentes">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">3</span>
+              <label for="secAntecedentes" class="block-title">Antecedentes</label>
+            </div>
+            <button type="button" class="btn-copy-sec" data-target="secAntecedentes" data-label="Antecedentes">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="secAntecedentes" rows="4" placeholder="Patológicos, farmacológicos, alérgicos, quirúrgicos, tóxicos, familiares, ginecoobstétricos..."></textarea>
+        </div>
+
+        <!-- 4. EXAMEN FÍSICO -->
+        <div class="clinical-block" data-section="examenFisico">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">4</span>
+              <label for="secExamenFisico" class="block-title">Examen físico</label>
+            </div>
+            <div class="block-header-btns">
+              <button type="button" id="btnInsertNormalEf" class="btn-mini-outline" title="Insertar plantilla de examen físico normal">
+                + Plantilla Normal
+              </button>
+              <button type="button" class="btn-copy-sec" data-target="secExamenFisico" data-label="Examen físico">
+                📋 Copiar
+              </button>
+            </div>
+          </div>
+          <textarea id="secExamenFisico" rows="5" placeholder="Signos vitales (TA, FC, FR, T°, SpO2, Peso/Talla) y hallazgos positivos o negativos por sistemas..."></textarea>
+        </div>
+
+        <!-- 5. ANÁLISIS -->
+        <div class="clinical-block highlight-analysis" data-section="analisis">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">5</span>
+              <div>
+                <label for="secAnalisis" class="block-title">Análisis</label>
+                <span class="block-hint">Integra Motivo + EA + Antecedentes + EF ➔ Diagnóstico y orientación</span>
+              </div>
+            </div>
+            <button type="button" class="btn-copy-sec" data-target="secAnalisis" data-label="Análisis">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="secAnalisis" rows="5" placeholder="Integración sindromática de los ítems anteriores, juicio clínico, Impresión Diagnóstica (CIE-10) y justificación del plan de manejo..."></textarea>
+        </div>
+
+        <!-- 6. PLAN DE MANEJO -->
+        <div class="clinical-block highlight-plan" data-section="planManejo">
+          <div class="block-header">
+            <div class="block-title-wrap">
+              <span class="block-number">6</span>
+              <label for="secPlanManejo" class="block-title">Plan de manejo</label>
+            </div>
+            <button type="button" class="btn-copy-sec" data-target="secPlanManejo" data-label="Plan de manejo">
+              📋 Copiar
+            </button>
+          </div>
+          <textarea id="secPlanManejo" rows="5" placeholder="1. Manejo farmacológico (dosis, vía, frecuencia, duración)&#10;2. Órdenes médicas / Paraclínicos&#10;3. Recomendaciones e incapacidad&#10;4. Signos de alarma y control..."></textarea>
+        </div>
+      </div>
+
+      <!-- STEP 3: BRIDGE TO PC (WHATSAPP / EMAIL / CLIPBOARD) -->
+      <div class="pc-bridge-box">
+        <div class="pc-bridge-header">
+          <h3>📲 Enviar del Celular al PC del Consultorio</h3>
+          <p>Envía la nota terminada en 1 clic a tu WhatsApp Web o Correo para pegarla en el sistema de Historia Clínica:</p>
+        </div>
+
+        <div class="pc-bridge-grid">
+          <button type="button" id="btnSendWhatsApp" class="btn-bridge whatsapp">
+            <span class="bridge-icon">💬</span>
+            <div class="bridge-text">
+              <strong>Enviar a WhatsApp</strong>
+              <small>Ideal para WhatsApp Web en el PC</small>
+            </div>
+          </button>
+
+          <button type="button" id="btnCopyAllBottom" class="btn-bridge copy-all">
+            <span class="bridge-icon">📋</span>
+            <div class="bridge-text">
+              <strong>Copiar Nota Completa</strong>
+              <small>Texto limpio con las 6 secciones</small>
+            </div>
+          </button>
+
+          <button type="button" id="btnSendEmail" class="btn-bridge email">
+            <span class="bridge-icon">✉️</span>
+            <div class="bridge-text">
+              <strong>Enviar por Correo</strong>
+              <small>Abre tu app de correo lista</small>
+            </div>
+          </button>
+
+          <button type="button" id="btnNativeShare" class="btn-bridge share">
+            <span class="bridge-icon">📤</span>
+            <div class="bridge-text">
+              <strong>Compartir...</strong>
+              <small>Telegram, Keep, AirDrop, etc.</small>
+            </div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: SETTINGS (AI API KEYS & WHATSAPP/EMAIL PREFS) -->
+  <div id="settingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="settingsModalTitle">⚙️ Configuración de MediScribe AI</h2>
+        <button type="button" id="btnCloseSettings" class="btn-close-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="settings-section">
+          <label for="aiProviderSelect" class="settings-label">Motor de Inteligencia Artificial</label>
+          <select id="aiProviderSelect" class="settings-select">
+            <option value="gemini">Google Gemini Flash (Recomendado · Soporta Voz y Texto Gratis)</option>
+            <option value="groq">Groq Cloud (Whisper Large v3 + Llama 3.3 70B · Ultrarrápido)</option>
+            <option value="local">Modo Local Básico (Sin API Key · Reglas locales)</option>
+          </select>
+        </div>
+
+        <!-- Gemini Config -->
+        <div id="geminiConfigBox" class="provider-config-box">
+          <label for="geminiApiKey" class="settings-label">
+            🔑 API Key de Google Gemini
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="help-link">Obtener gratis en Google AI Studio ↗</a>
+          </label>
+          <input type="password" id="geminiApiKey" class="settings-input" placeholder="AIzaSy..." autocomplete="off">
+          <label for="geminiModelSelect" class="settings-label mt-8">Modelo Gemini</label>
+          <select id="geminiModelSelect" class="settings-select">
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Más reciente y preciso)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash (Rápido multimodal)</option>
+          </select>
+          <p class="settings-hint">
+            🔒 Tu clave se guarda <strong>únicamente en la memoria de tu celular</strong> (<code>localStorage</code>). Permite enviar tanto dictado en texto como grabaciones de audio completas.
+          </p>
+        </div>
+
+        <!-- Groq Config -->
+        <div id="groqConfigBox" class="provider-config-box hidden">
+          <label for="groqApiKey" class="settings-label">
+            🔑 API Key de Groq Cloud
+            <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="help-link">Obtener gratis en Groq Console ↗</a>
+          </label>
+          <input type="password" id="groqApiKey" class="settings-input" placeholder="gsk_..." autocomplete="off">
+          <p class="settings-hint">
+            Usa <code>whisper-large-v3-turbo</code> para transcribir el audio en segundos y <code>llama-3.3-70b-versatile</code> para redactar las 6 secciones médicas.
+          </p>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Direct Bridge Config -->
+        <div class="settings-section">
+          <h3 class="settings-subheading">📲 Destino rápido para el PC (Opcional)</h3>
+          <label for="defaultWhatsappPhone" class="settings-label">Tu número de WhatsApp (con código de país, ej: 573001234567)</label>
+          <input type="tel" id="defaultWhatsappPhone" class="settings-input" placeholder="Ej: 573001234567 (dejar vacío para elegir chat)">
+          <small class="settings-hint">Si pones tu propio número, el botón "Enviar a WhatsApp" abrirá directamente tu chat personal ("Tú") para copiarlo inmediato en WhatsApp Web.</small>
+
+          <label for="defaultDoctorEmail" class="settings-label mt-8">Tu correo en el PC del consultorio</label>
+          <input type="email" id="defaultDoctorEmail" class="settings-input" placeholder="medico@consultorio.com">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="btnSaveSettings" class="btn-save-settings">Guardar Configuración</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SHIFT HISTORY -->
+  <div id="historyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="historyModalTitle">🕒 Historial Reciente en este Dispositivo</h2>
+        <button type="button" id="btnCloseHistory" class="btn-close-modal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="historyList" class="history-list"></div>
+      </div>
+      <div class="modal-footer split">
+        <button type="button" id="btnClearHistory" class="btn-chip danger">Vaciar historial</button>
+        <button type="button" id="btnCloseHistoryBottom" class="btn-save-settings">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
